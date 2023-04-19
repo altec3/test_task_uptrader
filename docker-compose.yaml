@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+
+  db:
+    container_name: treemenu-db
+    image: postgres:12.4-alpine
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - psql_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "${DB_USER}", "-d", "${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+    ports:
+    - "5432:5432"
+
+  collectstatic:
+    build:
+      context: .
+      target: image
+    env_file:
+      - ./.env
+    environment:
+      DB_HOST: db
+    volumes:
+      - static:/files/static
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python3", "manage.py", "collectstatic", "-c", "--no-input"]
+
+  app:
+    container_name: treemenu-app
+    image: treemenu:latest
+    build:
+      context: .
+      target: image
+    env_file:
+      - ./.env
+    restart: always
+    environment:
+      DB_HOST: db
+    volumes:
+      - ./treemenu:/app:ro
+      - static:/files/static
+      - media:/files/media
+    ports:
+      - "8000:8000"
+    depends_on:
+      collectstatic:
+        condition: service_completed_successfully
+    command: ["python3", "manage.py", "runserver", "0.0.0.0:8000"]
+
+  nginx:
+    container_name: treemenu-nginx
+    image: nginx:latest
+    restart: "always"
+    command: [ 'nginx', '-g', 'daemon off;' ]
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - static:/usr/share/nginx/html/static
+      - media:/usr/share/nginx/html/media
+    ports:
+      - "80:80"
+    depends_on:
+      app:
+        condition: service_started
+
+volumes:
+  psql_data:
+    driver: local
+  static:
+    driver: local
+  media:
+    driver: local

@@ -1,0 +1,8 @@
+# ignore all
+**
+
+# except
+!treemenu/**
+!poetry.lock
+!pyproject.toml
+!entrypoint.sh
